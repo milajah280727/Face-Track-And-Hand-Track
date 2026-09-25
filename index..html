@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#04070b"/>
+<title>V.I.S.O.R — Antarmuka Gesture Holografik</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#04070b; --panel:rgba(7,15,21,.62);
+  --line:rgba(126,231,255,.32); --line2:rgba(126,231,255,.13);
+  --acc:#7ee7ff; --tx:#c9eef6; --dim:#5d8a94;
+  --amber:#ffb058; --red:#ff6b6b; --ok:#6cf0c2;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:'Rajdhani',sans-serif}
+/* vignette + scanline halus untuk nuansa layar HUD */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:30;
+  background:radial-gradient(ellipse at center,transparent 52%,rgba(0,0,0,.52) 100%)}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:31;opacity:.5;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.02) 0 1px,transparent 1px 3px)}
+#cam{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);
+  filter:saturate(.82) contrast(1.06) brightness(.9)}
+#hud{position:fixed;inset:0;z-index:5}
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none;transition:transform .12s linear}
+
+/* ---------- panel HUD ---------- */
+.panel{position:relative;background:var(--panel);border:1px solid var(--line2);
+  backdrop-filter:blur(7px);padding:10px 12px;pointer-events:auto}
+.panel::before,.panel::after{content:'';position:absolute;width:11px;height:11px;border:0 solid var(--acc)}
+.panel::before{top:-1px;left:-1px;border-top-width:2px;border-left-width:2px}
+.panel::after{bottom:-1px;right:-1px;border-bottom-width:2px;border-right-width:2px}
+.panel h2{font:600 10px 'Rajdhani';letter-spacing:.3em;color:var(--acc);
+  display:flex;align-items:center;gap:8px;border-bottom:1px dashed var(--line2);
+  padding-bottom:6px;margin-bottom:8px}
+.dot{width:6px;height:6px;background:var(--acc);box-shadow:0 0 7px var(--acc);margin-left:auto;flex:none}
+.dot.off{background:#31424a;box-shadow:none}
+.dot.warn{background:var(--amber);box-shadow:0 0 7px var(--amber)}
+.col{position:fixed;display:flex;flex-direction:column;gap:12px;pointer-events:none;max-height:calc(100vh - 32px)}
+.col .panel{pointer-events:auto}
+.col.tr{top:16px;right:16px;align-items:flex-end}
+.col.bl{bottom:16px;left:16px}
+.col.br{bottom:16px;right:16px}
+#pFace{width:238px} #pCtl{width:222px} #pLog{width:330px}
+
+/* ---------- brand ---------- */
+#brand{position:fixed;top:16px;left:18px;display:flex;align-items:center;gap:12px}
+#brand svg{width:42px;height:42px;color:var(--acc)}
+#brand h1{font:700 21px 'Rajdhani';letter-spacing:.38em;color:#eafcff}
+#brand p{font:10px 'Share Tech Mono';letter-spacing:.14em;color:var(--dim)}
+#brand .meta{position:absolute;top:-4px;left:58px;display:none}
+.meta{display:flex;gap:14px;font:11px 'Share Tech Mono';color:var(--dim);margin-top:2px}
+.meta span b{color:var(--acc);font-weight:400}
+
+/* ---------- baris data & bar ---------- */
+.row{display:flex;align-items:center;gap:8px;margin:5px 0;font:10px 'Share Tech Mono';color:var(--dim)}
+.row b{width:44px;color:var(--tx);font-weight:400;flex:none}
+.row .val{width:44px;text-align:right;color:var(--acc);flex:none}
+.bar{flex:1;height:3px;background:rgba(126,231,255,.1);position:relative;overflow:hidden}
+.bar.center::after{content:'';position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}
+.bar>i{position:absolute;top:0;bottom:0;left:0;background:var(--acc)}
+.hint{font:9px 'Share Tech Mono';color:var(--dim);letter-spacing:.08em;margin-top:7px}
+#poseState{font:600 13px 'Rajdhani';letter-spacing:.14em;color:var(--tx);margin:2px 0 6px}
+#poseState.surge{color:var(--amber)}
+
+/* ---------- toggle sensor ---------- */
+.tg{display:flex;align-items:center;gap:9px;width:100%;background:transparent;
+  border:1px solid var(--line2);color:var(--dim);font:600 10px 'Rajdhani';letter-spacing:.22em;
+  padding:7px 9px;margin:5px 0;cursor:pointer;transition:all .15s}
+.tg svg{width:15px;height:15px;stroke:currentColor;fill:none;flex:none}
+.tg .led{margin-left:auto;width:5px;height:5px;background:#22313a;flex:none}
+.tg.on{border-color:var(--line);color:var(--tx)}
+.tg.on .led{background:var(--acc);box-shadow:0 0 6px var(--acc)}
+.tg:hover{border-color:var(--acc)}
+.energy{display:flex;align-items:center;gap:8px;margin-top:10px;font:10px 'Share Tech Mono';color:var(--dim)}
+.ebar{flex:1;height:7px;background:rgba(126,231,255,.08);position:relative;overflow:hidden}
+.ebar::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 8px,rgba(4,7,11,.9) 8px 10px)}
+.ebar>i{position:absolute;top:0;bottom:0;left:0;background:var(--acc);transition:width .12s linear}
+.energy.od .ebar>i{background:var(--amber)} .energy.od b{color:var(--amber)}
+.energy b{color:var(--acc);font-weight:400;width:38px;text-align:right}
+.legend{margin-top:10px;border-top:1px dashed var(--line2);padding-top:8px}
+.legend p{font:9px 'Share Tech Mono';color:var(--dim);margin:3px 0;letter-spacing:.03em}
+.legend b{color:var(--acc);font-weight:400;display:inline-block;width:104px}
+
+/* ---------- log & snapshot ---------- */
+#log{display:flex;flex-direction:column;justify-content:flex-end;gap:3px;
+  max-height:132px;overflow:hidden;font:10px 'Share Tech Mono'}
+#log .lg{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:lin .25s}
+#log .lg b{color:var(--acc);font-weight:400;margin-right:6px}
+#log .lg.ok{color:var(--ok)} #log .lg.warn{color:var(--amber)} #log .lg.err{color:var(--red)}
+@keyframes lin{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+#snaps{display:flex;gap:6px;margin-top:8px;min-height:0}
+#snaps img{height:50px;border:1px solid var(--line2);cursor:pointer;transition:border-color .15s}
+#snaps img:hover{border-color:var(--acc)}
+
+/* ---------- gauge bawah ---------- */
+#gauge{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);
+  display:flex;gap:22px;padding:9px 18px}
+#gauge>div{display:flex;flex-direction:column;gap:2px}
+#gauge span{font:9px 'Share Tech Mono';letter-spacing:.2em;color:var(--dim)}
+#gauge b{font:12px 'Share Tech Mono';color:var(--acc);font-weight:400}
+
+/* ---------- boot screen ---------- */
+#boot{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .6s}
+#boot.hide{opacity:0;pointer-events:none}
+#boot svg.big{width:104px;height:104px;color:var(--acc);animation:spin 16s linear infinite;margin-bottom:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+#boot h1{font:700 34px 'Rajdhani';letter-spacing:.5em;text-indent:.5em;color:#eafcff}
+#boot .btag{font:10px 'Share Tech Mono';letter-spacing:.22em;color:var(--dim);margin-bottom:14px}
+.mlist{width:330px;font:11px 'Share Tech Mono';color:var(--dim)}
+.mlist>div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line2)}
+.mlist .mst{color:var(--dim)} .mlist .mst.ok{color:var(--ok)} .mlist .mst.err{color:var(--red)}
+#pbar{width:330px;height:2px;background:rgba(126,231,255,.12);margin:4px 0 12px}
+#pbar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
+#startBtn{background:transparent;border:1px solid #2a3b43;color:#4b656e;
+  font:600 12px 'Rajdhani';letter-spacing:.34em;text-indent:.34em;padding:13px 40px;cursor:not-allowed;transition:all .2s}
+#startBtn.ready{border-color:var(--acc);color:var(--acc);cursor:pointer}
+#startBtn.ready:hover{background:rgba(126,231,255,.12)}
+#camErr{font:10px 'Share Tech Mono';color:var(--red);letter-spacing:.08em;min-height:14px}
+.bnote{font:9px 'Share Tech Mono';color:#3c545c;letter-spacing:.1em;margin-top:16px}
+
+@media (max-width:900px){
+  #pPose,#pLog,.legend{display:none}
+  #pFace{width:200px}
+  #gauge{gap:12px;padding:8px 12px}
+}
+</style>
+</head>
+<body>
+
+<video id="cam" autoplay playsinline muted></video>
+<canvas id="hud"></canvas>
+
+<div id="ui">
+  <!-- brand kiri-atas -->
+  <div id="brand">
+    <svg viewBox="0 0 100 100" fill="none" stroke="currentColor">
+      <circle cx="50" cy="50" r="46" stroke-width="3"/>
+      <circle cx="50" cy="50" r="34" stroke-width="1.5" stroke-dasharray="6 5"/>
+      <circle cx="50" cy="50" r="16" stroke-width="2.5"/>
+      <path d="M68 50H82M62.7 62.7 72.6 72.6M50 68V82M37.3 62.7 27.4 72.6M32 50H18M37.3 37.3 27.4 27.4M50 32V18M62.7 37.3 72.6 27.4" stroke-width="2"/>
+    </svg>
+    <div>
+      <h1>V.I.S.O.R</h1>
+      <p>VISION INTERFACE · SPATIAL OVERLAY RUNTIME</p>
+      <div class="meta">
+        <span>JAM <b id="clock">--:--:--</b></span>
+        <span>FPS <b id="fps">0</b></span>
+        <span id="res">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- kolom kanan-atas: wajah + postur -->
+  <div class="col tr">
+    <div class="panel" id="pFace">
+      <h2>PELACAK WAJAH <i id="faceDot" class="dot off"></i></h2>
+      <div class="row"><b>YAW</b><span class="val" id="yawV">—</span><div class="bar center"><i id="bYaw"></i></div></div>
+      <div class="row"><b>PITCH</b><span class="val" id="pitchV">—</span><div class="bar center"><i id="bPitch"></i></div></div>
+      <div class="row"><b>ROLL</b><span class="val" id="rollV">—</span><div class="bar center"><i id="bRoll"></i></div></div>
+      <div class="row"><b>KEDIP</b><span class="val" id="blinkV">0%</span><div class="bar"><i id="bBlink"></i></div></div>
+      <div class="row"><b>SENYUM</b><span class="val" id="smileV">0%</span><div class="bar"><i id="bSmile"></i></div></div>
+      <p class="hint">KEDIP 2× CEPAT — TANGKAP FRAME</p>
+    </div>
+    <div class="panel" id="pPose">
+      <h2>STATUS POSTUR <i id="poseDot" class="dot off"></i></h2>
+      <div id="poseState">MENCARI TARGET…</div>
+      <div class="row"><b>SIKU KIRI</b><span class="val" id="angL">—</span><div class="bar"><i id="bAngL"></i></div></div>
+      <div class="row"><b>SIKU KANAN</b><span class="val" id="angR">—</span><div class="bar"><i id="bAngR"></i></div></div>
+    </div>
+  </div>
+
+  <!-- kolom kiri-bawah: log -->
+  <div class="col bl">
+    <div class="panel" id="pLog">
+      <h2>LOG PERISTIWA</h2>
+      <div id="log"></div>
+      <div id="snaps"></div>
+    </div>
+  </div>
+
+  <!-- kolom kanan-bawah: sensor + energi + legenda -->
+  <div class="col br">
+    <div class="panel" id="pCtl">
+      <h2>ARMADA SENSOR</h2>
+      <button class="tg on" id="tgFace">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        WAJAH<span class="led"></span></button>
+      <button class="tg on" id="tgHand">
+        <svg viewBox="0 0 24 24"><path d="M8.5 11.5V5.8a1.3 1.3 0 0 1 2.6 0V11M11.1 11V4.6a1.3 1.3 0 0 1 2.6 0V11M13.7 11V5.8a1.3 1.3 0 0 1 2.6 0v6.7M16.3 12.5l1.9-1.9a1.25 1.25 0 0 1 1.8 1.8l-4.1 4.6c-1.4 1.6-2.9 2.5-5.2 2.5-2.8 0-4.3-1.5-5.4-3.7l-1.7-3.4a1.35 1.35 0 0 1 2.4-1.2l1.5 2.3"/></svg>
+        TANGAN<span class="led"></span></button>
+      <button class="tg on" id="tgPose">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="4.3" r="2.1"/><path d="M12 6.6v5.2M12 11.8l-3.8 6.4M12 11.8l3.8 6.4M4.5 9.6 12 8l7.5 1.6"/></svg>
+        POSTUR<span class="led"></span></button>
+      <button class="tg" id="tgSnd">
+        <svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9.5a3.6 3.6 0 0 1 0 5M17.8 7.5a6.6 6.6 0 0 1 0 9"/></svg>
+        SUARA<span class="led"></span></button>
+      <div class="energy" id="eWrap"><span>ENERGI</span><div class="ebar"><i id="eFill"></i></div><b id="eVal">0%</b></div>
+      <div class="legend">
+        <p><b>TELAPAK</b>panggil hologram</p>
+        <p><b>KEPAL</b>padamkan</p>
+        <p><b>CUBIT + GESER</b>putar objek</p>
+        <p><b>2 TELAPAK</b>atur skala</p>
+        <p><b>DUA JARI</b>ganti bentuk</p>
+        <p><b>TUNJUK</b>sinar energi</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- gauge bawah-tengah -->
+  <div id="gauge" class="panel">
+    <div><span>T.KIRI</span><b id="gL">—</b></div>
+    <div><span>T.KANAN</span><b id="gR">—</b></div>
+    <div><span>BENTUK</span><b id="gShape">—</b></div>
+    <div><span>STATUS</span><b id="gState">DORMAN</b></div>
+  </div>
+</div>
+
+<!-- layar boot -->
+<div id="boot">
+  <svg class="big" viewBox="0 0 100 100" fill="none" stroke="currentColor">
+    <circle cx="50" cy="50" r="46" stroke-width="3"/>
+    <circle cx="50" cy="50" r="34" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <circle cx="50" cy="50" r="16" stroke-width="2.5"/>
+    <path d="M68 50H82M62.7 62.7 72.6 72.6M50 68V82M37.3 62.7 27.4 72.6M32 50H18M37.3 37.3 27.4 27.4M50 32V18M62.7 37.3 72.6 27.4" stroke-width="2"/>
+  </svg>
+  <h1>V.I.S.O.R</h1>
+  <div class="btag">VISION INTERFACE · SPATIAL OVERLAY RUNTIME — MK-III</div>
+  <div class="mlist">
+    <div><span>FACE LANDMARKER · 478 TITIK</span><i class="mst" id="mFace">STANDBY</i></div>
+    <div><span>HAND LANDMARKER · 21×2 TITIK</span><i class="mst" id="mHand">STANDBY</i></div>
+    <div><span>POSE LANDMARKER · 33 TITIK</span><i class="mst" id="mPose">STANDBY</i></div>
+  </div>
+  <div id="pbar"><i id="pfill"></i></div>
+  <button id="startBtn" disabled>MEMUAT MODEL…</button>
+  <div id="camErr"></div>
+  <div class="bnote">SELURUH PEMROSESAN BERJALAN LOKAL DI BROWSER — TIDAK ADA DATA DIUNGGAH</div>
+</div>
+
+<script type="module">
+import { FilesetResolver, FaceLandmarker, PoseLandmarker, HandLandmarker }
+  from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+
+/* ================= util & referensi ================= */
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const video=$('cam'), canvas=$('hud'), ctx=canvas.getContext('2d');
+const DPR=Math.min(devicePixelRatio||1,1.5);
+let CW=0,CH=0;
+function resize(){CW=innerWidth;CH=innerHeight;canvas.width=CW*DPR;canvas.height=CH*DPR;
+  canvas.style.width=CW+'px';canvas.style.height=CH+'px';}
+addEventListener('resize',resize); resize();
+
+const lineA=a=>`rgba(126,231,255,${a})`;
+const amberA=a=>`rgba(255,176,88,${a})`;
+
+/* ================= state global ================= */
+const models={face:null,hand:null,pose:null};
+const tg={face:true,hand:true,pose:true,snd:false};
+let faceRes=null,handRes=null,poseRes=null;
+let running=false,lastVT=-1,frameN=0,lastT=0,fpsE=60;
+let faceLm=null,head={yaw:0,pitch:0,roll:0},blinkV=0,smileV=0;
+let blinking=false,lastBlinkRel=0;
+let posePts=null,armsRaised=false,angL=0,angR=0;
+let hands=[];
+const slot={L:{pinch:false,cand:'NONE',cnt:0,g:'NONE',hold:0,twoUsed:false},
+            R:{pinch:false,cand:'NONE',cnt:0,g:'NONE',hold:0,twoUsed:false}};
+const GNAME={PALM:'TELAPAK',FIST:'KEPAL',PINCH:'CUBIT',POINT:'TUNJUK',TWO:'DUA JARI',NONE:'—'};
+
+const holo={state:'dormant',t:0,yaw:.6,pitch:.15,scale:1};
+let drag=null,scaleRef=null,scaling=false,shapeIdx=0,lastShape=0;
+let energy=0,overdrive=false;
+let trail=[],sparks=[],fx=[];
+const ret={x:0,y:0,a:0};
+const par={x:0,y:0};
+
+/* ================= mapping video → layar (cover + mirror) ================= */
+const M={s:1,dx:0,dy:0,vw:1280,vh:720};
+function computeMap(){
+  const vw=video.videoWidth||1280, vh=video.videoHeight||720;
+  const s=Math.max(CW/vw,CH/vh);
+  M.s=s; M.dx=(CW-vw*s)/2; M.dy=(CH-vh*s)/2; M.vw=vw; M.vh=vh;
+}
+const P=lm=>({x:M.dx+(1-lm.x)*M.vw*M.s, y:M.dy+lm.y*M.vh*M.s});
+
+/* ================= topology titik ================= */
+const HAND_LINKS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],
+[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const POSE_LINKS=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],
+[23,25],[25,27],[24,26],[26,28],[27,29],[29,31],[27,31],[28,30],[30,32],[28,32],
+[15,17],[15,19],[15,21],[17,19],[16,18],[16,20],[16,22],[18,20]];
+const OVAL=[10,109,67,103,54,21,131,49,127,234,93,132,58,172,136,150,149,176,148,152,
+377,400,378,379,365,397,288,361,323,454,356,389,251,284,332,297,338];
+const EYE_L=[33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+const EYE_R=[263,249,390,373,380,362,385,387];
+const LIPS=[61,185,40,39,37,0,267,269,270,409,291,375,321,405,314,17,84,181,91,146];
+const BROW_L=[70,63,105,66,107], BROW_R=[336,296,334,293,300], NOSE=[168,6,197,195,5,4];
+
+/* ================= bentuk hologram (wireframe 3D) ================= */
+function icosahedron(){
+  const p=(1+Math.sqrt(5))/2;
+  const V=[[-1,p,0],[1,p,0],[-1,-p,0],[1,-p,0],[0,-1,p],[0,1,p],[0,-1,-p],[0,1,-p],
+    [p,0,-1],[p,0,1],[-p,0,-1],[-p,0,1]].map(v=>{const l=Math.hypot(v[0],v[1],v[2]);return v.map(x=>x/l);});
+  const E=[]; let min=1e9; const d2=[];
+  for(let i=0;i<12;i++)for(let j=i+1;j<12;j++){
+    const d=Math.hypot(V[i][0]-V[j][0],V[i][1]-V[j][1],V[i][2]-V[j][2]);
+    d2.push([i,j,d]); if(d<min)min=d;}
+  for(const[i,j,d] of d2) if(d<min*1.15) E.push(i,j);
+  return {name:'ICOSAHEDRON',v:V,e:E,dots:true};
+}
+function torus(){
+  const R=1,r=.42,SU=16,SV=8,V=[],E=[];
+  for(let i=0;i<SU;i++)for(let j=0;j<SV;j++){
+    const u=i/SU*2*Math.PI,v=j/SV*2*Math.PI;
+    V.push([(R+r*Math.cos(v))*Math.cos(u), r*Math.sin(v), (R+r*Math.cos(v))*Math.sin(u)]);}
+  const id=(i,j)=>((i%SU+SU)%SU)*SV+((j%SV+SV)%SV);
+  for(let i=0;i<SU;i++)for(let j=0;j<SV;j++){E.push(id(i,j),id(i+1,j),id(i,j),id(i,j+1));}
+  return {name:'TORUS',v:V,e:E,dots:false};
+}
+function globe(){
+  const V=[],E=[];
+  const ring=phi=>{const b=V.length;
+    for(let k=0;k<24;k++){const th=k/24*2*Math.PI;
+      V.push([Math.cos(phi)*Math.cos(th),Math.sin(phi),Math.cos(phi)*Math.sin(th)]);}
+    for(let k=0;k<24;k++)E.push(b+k,b+(k+1)%24);};
+  [-60,-30,0,30,60].forEach(a=>ring(a*Math.PI/180));
+  for(let m=0;m<8;m++){const th=m/8*Math.PI,b=V.length;
+    for(let k=0;k<16;k++){const t=k/16*2*Math.PI;
+      V.push([Math.cos(t)*Math.cos(th),Math.sin(t),Math.cos(t)*Math.sin(th)]);}
+    for(let k=0;k<16;k++)E.push(b+k,b+(k+1)%16);}
+  return {name:'KUBAH DATA',v:V,e:E,dots:false};
+}
+function reactor(){
+  const V=[],E=[];
+  const ring=(r,z,n)=>{const b=V.length;
+    for(let k=0;k<n;k++){const a=k/n*2*Math.PI;V.push([r*Math.cos(a),r*Math.sin(a),z]);}
+    for(let k=0;k<n;k++)E.push(b+k,b+(k+1)%n); return b;};
+  const r1=ring(1,0,36), r2=ring(.8,.05,36);
+  ring(.55,-.04,24); ring(.3,.06,18); ring(.66,.1,12);
+  for(let k=0;k<12;k++)E.push(r1+k*3,r2+k*3);            // jari-jari luar
+  const b=V.length;                                       // segitiga inti
+  [90,210,330].forEach(a=>{const r=a*Math.PI/180;V.push([.2*Math.cos(r),.2*Math.sin(r),.12]);});
+  E.push(b,b+1,b+1,b+2,b+2,b);
+  return {name:'ARC REACTOR',v:V,e:E,dots:true};
+}
+const SHAPES=[icosahedron(),torus(),globe(),reactor()];
+
+/* ================= pemuatan model ================= */
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+let fileset=null,ready=false;
+function mSet(id,txt,cls){const el=$(id);el.textContent=txt;el.className='mst'+(cls?' '+cls:'');}
+async function makeTask(kind,path,opts){
+  try{ return await kind.createFromOptions(fileset,{baseOptions:{modelAssetPath:path,delegate:'GPU'},...opts}); }
+  catch(e){ return await kind.createFromOptions(fileset,{baseOptions:{modelAssetPath:path,delegate:'CPU'},...opts}); }
+}
+async function loadModels(){
+  fileset=await FilesetResolver.forVisionTasks(WASM);
+  const jobs=[
+    ['mFace',FaceLandmarker,'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+      {runningMode:'VIDEO',numFaces:1,outputFaceBlendshapes:true,outputFacialTransformationMatrixes:true},'face'],
+    ['mHand',HandLandmarker,'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+      {runningMode:'VIDEO',numHands:2},'hand'],
+    ['mPose',PoseLandmarker,'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker.task',
+      {runningMode:'VIDEO',numPoses:1},'pose'],
+  ];
+  let ok=0;
+  for(let i=0;i<jobs.length;i++){
+    const[id,kind,path,opts,key]=jobs[i];
+    mSet(id,'MEMUAT…');
+    try{ models[key]=await makeTask(kind,path,opts); mSet(id,'ONLINE','ok'); ok++; }
+    catch(e){ mSet(id,'GAGAL','err'); }
+    $('pfill').style.width=((i+1)/jobs.length*100)+'%';
+  }
+  return ok;
+}
+loadModels().then(n=>{
+  if(n===0){ $('camErr').textContent='SEMUA MODEL GAGAL DIMUAT — PERIKSA KONEKSI INTERNET'; return; }
+  ready=true;
+  const b=$('startBtn'); b.disabled=false; b.textContent='INISIALISASI KAMERA'; b.classList.add('ready');
+}).catch(()=>{ $('camErr').textContent='GAGAL MENGHUBUNGI CDN MEDIAPIPE — PERIKSA KONEKSI'; });
+
+/* ================= audio (hum + blip, opsional) ================= */
+let AC=null,humG=null;
+function initAudio(){
+  try{
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    humG=AC.createGain(); humG.gain.value=0;
+    const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=230;
+    [52,52.7].forEach(fr=>{const o=AC.createOscillator();o.type='sawtooth';o.frequency.value=fr;o.connect(f);o.start();});
+    f.connect(humG); humG.connect(AC.destination);
+  }catch(e){}
+}
+function blip(fr=880,d=.1,g=.05){
+  if(!tg.snd||!AC)return;
+  const o=AC.createOscillator(),ga=AC.createGain();
+  o.type='square'; o.frequency.value=fr;
+  ga.gain.setValueAtTime(g,AC.currentTime);
+  ga.gain.exponentialRampToValueAtTime(1e-4,AC.currentTime+d);
+  o.connect(ga); ga.connect(AC.destination); o.start(); o.stop(AC.currentTime+d);
+}
+function updateHum(){
+  if(!humG)return;
+  const target=(holo.state==='active'&&tg.snd)?.05:0;
+  humG.gain.value+=(target-humG.gain.value)*.08;
+}
+
+/* ================= log & UI kecil ================= */
+function addLog(msg,cls=''){
+  const d=document.createElement('div');
+  d.className='lg '+cls;
+  d.innerHTML=`<b>[${new Date().toTimeString().slice(0,8)}]</b>${msg}`;
+  const log=$('log'); log.appendChild(d);
+  while(log.children.length>14) log.firstChild.remove();
+}
+setInterval(()=>{ $('clock').textContent=new Date().toTimeString().slice(0,8); },500);
+
+[['tgFace','face'],['tgHand','hand'],['tgPose','pose'],['tgSnd','snd']].forEach(([id,key])=>{
+  $(id).addEventListener('click',()=>{
+    tg[key]=!tg[key]; $(id).classList.toggle('on',tg[key]);
+    if(key==='face'){faceRes=null;faceLm=null;}
+    if(key==='hand'){handRes=null;hands=[];}
+    if(key==='pose'){poseRes=null;posePts=null;armsRaised=false;}
+    addLog(`Sensor ${key.toUpperCase()} ${tg[key]?'DIAKTIFKAN':'DIMATIKAN'}`);
+    blip(tg[key]?980:440,.06,.04);
+  });
+});
+
+/* ================= start kamera ================= */
+ $('startBtn').addEventListener('click',async()=>{
+  if(!ready)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});
+    video.srcObject=stream; await video.play();
+  }catch(e){
+    $('camErr').textContent='AKSES KAMERA GAGAL — '+
+      (e.name==='NotAllowedError'?'IZIN DITOLAK':'GUNAKAN HTTPS / LOCALHOST & PERIKSA KAMERA');
+    return;
+  }
+  initAudio();
+  running=true; lastT=performance.now();
+  computeMap();
+  $('res').textContent=`${video.videoWidth}×${video.videoHeight} · LOKAL`;
+  $('boot').classList.add('hide'); setTimeout(()=>$('boot').remove(),700);
+  addLog('SISTEM ONLINE — V.I.S.O.R MK-III','ok');
+  addLog(`Kamera aktif ${video.videoWidth}×${video.videoHeight}`,'ok');
+  if(!models.pose)addLog('Pose offline — mode hemat','warn');
+  addLog('Angkat telapak terbuka untuk memanggil hologram');
+  requestAnimationFrame(loop);
+});
+
+/* ================= deteksi per frame video ================= */
+function detectAll(now){
+  if(video.currentTime===lastVT)return;
+  lastVT=video.currentTime; frameN++;
+  try{ if(models.face&&tg.face){ faceRes=models.face.detectForVideo(video,now); processFace(now);} }catch(e){}
+  try{ if(models.hand&&tg.hand){ handRes=models.hand.detectForVideo(video,now); processHands();} }catch(e){}
+  try{ if(models.pose&&tg.pose&&frameN%2===0){ poseRes=models.pose.detectForVideo(video,now); processPose();} }catch(e){}
+}
+
+/* ---- wajah: euler kepala, blendshape, kedip ganda ---- */
+function processFace(now){
+  if(!faceRes||!faceRes.faceLandmarks||!faceRes.faceLandmarks.length){faceLm=null;return;}
+  faceLm=faceRes.faceLandmarks[0];
+  if(faceRes.facialTransformationMatrixes&&faceRes.facialTransformationMatrixes[0]){
+    const d=faceRes.facialTransformationMatrixes[0].data;      // kolom-utama
+    const r02=d[8],r12=d[9],r22=d[10],r10=d[1],r11=d[5];
+    const pitch=-Math.asin(clamp(r12,-1,1));
+    head.yaw  =-Math.atan2(r02,r22)*180/Math.PI;               // cermin layar
+    head.pitch=-pitch*180/Math.PI;
+    head.roll = Math.atan2(r10,r11)*180/Math.PI;
+  }
+  let bl=0,br=0,sm=0;
+  if(faceRes.faceBlendshapes&&faceRes.faceBlendshapes[0]){
+    for(const c of faceRes.faceBlendshapes[0].categories){
+      if(c.categoryName==='eyeBlinkLeft')bl=c.score;
+      else if(c.categoryName==='eyeBlinkRight')br=c.score;
+      else if(c.categoryName==='mouthSmileLeft'||c.categoryName==='mouthSmileRight')sm+=c.score/2;
+    }
+  }
+  blinkV=(bl+br)/2; smileV=sm;
+  const b=Math.max(bl,br);
+  if(b>.55)blinking=true;
+  else if(blinking&&b<.3){
+    blinking=false;
+    if(now-lastBlinkRel<650){doSnapshot();lastBlinkRel=0;}
+    else lastBlinkRel=now;
+  }
+}
+
+/* ---- tangan: klasifikasi gesture + histeresis pinch ---- */
+function classify(lm){
+  const d=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const W=lm[0], sc=d(W,lm[9])||1e-6;
+  const e8=d(lm[8],W)>d(lm[6],W)*1.15,  e12=d(lm[12],W)>d(lm[10],W)*1.15,
+        e16=d(lm[16],W)>d(lm[14],W)*1.15, e20=d(lm[20],W)>d(lm[18],W)*1.15;
+  const n=(e8?1:0)+(e12?1:0)+(e16?1:0)+(e20?1:0);
+  const pd=d(lm[4],lm[8])/sc;
+  if(pd<.42&&(e12||e16||e20))return 'PINCH';
+  if(n===0)return 'FIST';
+  if(n===4)return 'PALM';
+  if(e8&&n===1)return 'POINT';
+  if(e8&&e12&&n===2)return 'TWO';
+  return 'NONE';
+}
+function processHands(){
+  hands=[];
+  if(!handRes||!handRes.landmarks)return;
+  for(const lm of handRes.landmarks){
+    const pts=lm.map(P);
+    const wrist=pts[0];
+    const side=wrist.x<CW/2?'L':'R';             // konsisten dengan tampilan cermin
+    const raw=classify(lm);
+    const s=slot[side];
+    if(raw===s.cand)s.cnt++; else{s.cand=raw;s.cnt=1;}
+    if(s.cnt>=3)s.g=raw;
+    const pd=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y)/(Math.hypot(lm[0].x-lm[9].x,lm[0].y-lm[9].y)||1e-6);
+    if(pd<.38)s.pinch=true; else if(pd>.55)s.pinch=false;   // histeresis
+    hands.push({pts,lm,g:s.g,pinch:s.pinch,side,wrist,indexTip:pts[8],
+      mid:{x:(pts[4].x+pts[8].x)/2,y:(pts[4].y+pts[8].y)/2}});
+  }
+}
+
+/* ---- postur: status lengan & sudut siku ---- */
+function angleAt(a,b,c){
+  const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];
+  const m=(Math.hypot(...v1)*Math.hypot(...v2))||1;
+  return Math.acos(clamp((v1[0]*v2[0]+v1[1]*v2[1])/m,-1,1))*180/Math.PI;
+}
+function processPose(){
+  posePts=null;
+  if(!poseRes||!poseRes.landmarks||!poseRes.landmarks[0])return;
+  const lms=poseRes.landmarks[0];
+  posePts=lms.map(P);
+  armsRaised=posePts[15].y<posePts[11].y&&posePts[16].y<posePts[12].y;
+  angL=angleAt(posePts[11],posePts[13],posePts[15]);
+  angR=angleAt(posePts[12],posePts[14],posePts[16]);
+}
+
+/* ================= logika hologram & gestur ================= */
+function activate(now){
+  holo.state='active'; holo.t=0;
+  addLog('HOLOGRAM DIMATERIALISASI — '+SHAPES[shapeIdx].name,'ok');
+  fx.push({type:'ring',x:CW/2,y:CH*.44,t0:now,dur:700,max:Math.min(CW,CH)*.36});
+  blip(660,.12,.07); setTimeout(()=>blip(990,.1,.05),90);
+}
+function collapse(now){
+  holo.state='coll';
+  addLog('Hologram dipadamkan');
+  fx.push({type:'ring',x:CW/2,y:CH*.44,t0:now,dur:500,max:Math.min(CW,CH)*.22});
+  blip(220,.16,.06);
+}
+function nextShape(now){
+  shapeIdx=(shapeIdx+1)%SHAPES.length; lastShape=now;
+  addLog('Bentuk → '+SHAPES[shapeIdx].name);
+  blip(1250,.08,.05);
+}
+function pushTrail(p,now){
+  const last=trail[trail.length-1];
+  const brk=last&&(Math.hypot(p.x-last.x,p.y-last.y)>70||now-last.t>150);
+  trail.push({x:p.x,y:p.y,t:now,brk:!!brk});
+  if(last&&!brk){
+    const dd=Math.hypot(p.x-last.x,p.y-last.y);
+    if(dd>16)for(let k=0;k<2;k++)sparks.push({x:p.x,y:p.y,
+      vx:(Math.random()-.5)*3,vy:(Math.random()-.5)*3-.5,t0:now,life:420+Math.random()*260});
+  }
+}
+function updateHolo(dt,now){
+  const active=holo.state==='active';
+  const L=hands.find(h=>h.side==='L'),R=hands.find(h=>h.side==='R');
+
+  // cubit → mencengkeram & memutar
+  const pincher=hands.find(h=>h.pinch);
+  if(active&&pincher){
+    if(!drag){drag={x:pincher.mid.x,y:pincher.mid.y,yaw:holo.yaw,pitch:holo.pitch};blip(520,.06,.04);}
+    holo.yaw  =drag.yaw  +(pincher.mid.x-drag.x)*.008;
+    holo.pitch=clamp(drag.pitch+(pincher.mid.y-drag.y)*.008,-1.15,1.15);
+  }else{
+    drag=null;
+    holo.yaw+=dt*.00045*(overdrive?2.2:1)*(1+energy*1.2);   // putaran idle
+  }
+
+  // dua telapak → skala
+  if(active&&L&&R&&(L.g==='PALM'||L.pinch)&&(R.g==='PALM'||R.pinch)){
+    const d=Math.hypot(L.wrist.x-R.wrist.x,L.wrist.y-R.wrist.y);
+    if(!scaleRef)scaleRef={d0:Math.max(40,d),s0:holo.scale};
+    holo.scale=clamp(scaleRef.s0*d/scaleRef.d0,.4,2.6);
+    scaling=true;
+  }else{scaleRef=null;scaling=false;}
+
+  // telapak → panggil ; kepal → padam
+  if(!active){
+    for(const h of hands){
+      if(h.g==='PALM'){slot[h.side].hold+=dt;if(slot[h.side].hold>420)activate(now);}
+      else slot[h.side].hold=0;
+    }
+  }else if((L&&L.g==='FIST')||(R&&R.g==='FIST'))collapse(now);
+
+  // dua jari → ganti bentuk
+  for(const h of hands){
+    if(h.g==='TWO'){
+      if(!slot[h.side].twoUsed&&now-lastShape>650){nextShape(now);slot[h.side].twoUsed=true;}
+    }else slot[h.side].twoUsed=false;
+  }
+
+  // tunjuk → sinar energi
+  for(const h of hands)if(h.g==='POINT')pushTrail(h.indexTip,now);
+  while(trail.length&&now-trail[0].t>900)trail.shift();
+
+  // energi
+  let gain=0;
+  if(hands.some(h=>h.g!=='NONE'))gain+=.012;
+  if(hands.some(h=>h.g==='POINT'))gain+=.02;
+  if(armsRaised)gain+=.05;
+  if(drag||scaling)gain+=.02;
+  energy=clamp(energy+gain-(gain>0?0:.005)*dt/16.7,0,1);
+  if(energy>=1&&!overdrive){overdrive=true;
+    addLog('ENERGI PENUH — MODE OVERDRIVE','warn');
+    fx.push({type:'ring',x:CW/2,y:CH*.44,t0:now,dur:900,max:Math.min(CW,CH)*.5});
+    blip(1560,.2,.06);}
+  if(overdrive){energy=clamp(energy-.004*dt/16.7,0,1);
+    if(energy<.55){overdrive=false;addLog('Overdrive selesai');}}
+
+  // animasi materialize / padam
+  if(holo.state==='active')holo.t=Math.min(1,holo.t+dt/650);
+  else if(holo.state==='coll'){holo.t-=dt/300;if(holo.t<=0){holo.t=0;holo.state='dormant';}}
+}
+
+/* ================= snapshot (kedip ganda) ================= */
+function doSnapshot(){
+  const oc=document.createElement('canvas');
+  oc.width=CW*DPR; oc.height=CH*DPR;
+  const o=oc.getContext('2d');
+  o.setTransform(DPR,0,0,DPR,0,0);
+  o.save(); o.translate(CW,0); o.scale(-1,1);
+  o.drawImage(video,M.dx,M.dy,M.vw*M.s,M.vh*M.s); o.restore();
+  o.drawImage(canvas,0,0,CW,CH);
+  const url=oc.toDataURL('image/png');
+  const img=new Image(); img.src=url; img.title='Klik untuk unduh';
+  img.onclick=()=>{const a=document.createElement('a');a.href=url;
+    a.download='visor-'+Date.now()+'.png';a.click();addLog('Frame diunduh','ok');};
+  const sn=$('snaps'); sn.appendChild(img);
+  while(sn.children.length>4)sn.firstChild.remove();
+  fx.push({type:'flash',t0:performance.now(),dur:380});
+  addLog('Kedip ganda — frame tertangkap','ok'); blip(1400,.1,.05);
+}
+
+/* ================= render ================= */
+function strokeIdx(pts,idx,closed,alpha,w,color){
+  ctx.beginPath();
+  idx.forEach((ii,k)=>{const p=pts[ii];k?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
+  if(closed)ctx.closePath();
+  ctx.strokeStyle=color||lineA(alpha); ctx.lineWidth=w; ctx.stroke();
+}
+function drawPose(){
+  if(!posePts)return;
+  const col=armsRaised?amberA(.65):lineA(.45);
+  ctx.lineCap='round';
+  for(const[a,b] of POSE_LINKS){
+    if((poseRes.landmarks[0][a].visibility??1)<.5||(poseRes.landmarks[0][b].visibility??1)<.5)continue;
+    ctx.beginPath();ctx.moveTo(posePts[a].x,posePts[a].y);ctx.lineTo(posePts[b].x,posePts[b].y);
+    ctx.strokeStyle=col;ctx.lineWidth=1.6;ctx.stroke();
+  }
+  ctx.fillStyle=col;
+  for(const p of posePts)ctx.fillRect(p.x-1.5,p.y-1.5,3,3);
+  const sr=Math.abs(posePts[11].x-posePts[12].x)*.42;
+  ctx.beginPath();ctx.arc(posePts[0].x,posePts[0].y,sr,0,7);
+  ctx.strokeStyle=col;ctx.lineWidth=1.2;ctx.stroke();
+  ctx.font='10px "Share Tech Mono",monospace';ctx.textAlign='center';
+  ctx.fillStyle=armsRaised?amberA(.95):lineA(.7);
+  ctx.fillText(armsRaised?'▲ SURGE DAYA — TANGAN TERANGKAT':'TARGET POSTUR TERKUNCI',posePts[0].x,posePts[0].y-sr-10);
+  ctx.textAlign='left';
+}
+function drawFace(){
+  if(faceLm){
+    const pts=faceLm.map(P);
+    strokeIdx(pts,OVAL,true,.4,1);
+    strokeIdx(pts,EYE_L,true,.55,1); strokeIdx(pts,EYE_R,true,.55,1);
+    strokeIdx(pts,LIPS,true,.45,1);
+    strokeIdx(pts,BROW_L,false,.5,1); strokeIdx(pts,BROW_R,false,.5,1);
+    strokeIdx(pts,NOSE,false,.4,1);
+  }
+  // retikel mengikuti hidung + parallax panel
+  const tx=faceLm?P(faceLm[1]).x:CW/2, ty=faceLm?P(faceLm[1]).y:CH/2;
+  ret.x+=(tx-ret.x)*.25; ret.y+=(ty-ret.y)*.25;
+  ret.a+=((faceLm?1:0)-ret.a)*.1;
+  if(ret.a>.03){
+    const a=ret.a;
+    ctx.strokeStyle=lineA(.8*a);ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(ret.x,ret.y,15,0,7);ctx.stroke();
+    for(const[dx,dy] of[[1,0],[-1,0],[0,1],[0,-1]]){
+      ctx.beginPath();ctx.moveTo(ret.x+dx*19,ret.y+dy*19);
+      ctx.lineTo(ret.x+dx*26,ret.y+dy*26);ctx.stroke();}
+    ctx.fillStyle=lineA(.9*a);ctx.fillRect(ret.x-1,ret.y-1,2,2);
+  }
+  par.x+=(clamp(head.yaw/90,-1,1)*-6-par.x)*.08;
+  par.y+=(clamp(head.pitch/90,-1,1)*4-par.y)*.08;
+  $('ui').style.transform=`translate(${par.x}px,${par.y}px)`;
+}
+function drawHands(){
+  for(const h of hands){
+    for(const[a,b] of HAND_LINKS){
+      ctx.beginPath();ctx.moveTo(h.pts[a].x,h.pts[a].y);ctx.lineTo(h.pts[b].x,h.pts[b].y);
+      ctx.strokeStyle=lineA(.7);ctx.lineWidth=1.4;ctx.stroke();
+    }
+    ctx.fillStyle=lineA(.9);
+    for(const p of h.pts)ctx.fillRect(p.x-1.2,p.y-1.2,2.4,2.4);
+    if(h.pinch){
+      ctx.beginPath();ctx.moveTo(h.pts[4].x,h.pts[4].y);ctx.lineTo(h.pts[8].x,h.pts[8].y);
+      ctx.strokeStyle=amberA(.9);ctx.lineWidth=1.4;ctx.stroke();
+      ctx.beginPath();ctx.arc(h.mid.x,h.mid.y,6,0,7);
+      ctx.strokeStyle=amberA(.9);ctx.stroke();
+    }
+    if(h.g==='POINT'){
+      ctx.beginPath();ctx.arc(h.indexTip.x,h.indexTip.y,9,0,7);
+      ctx.strokeStyle=amberA(.85);ctx.lineWidth=1.4;ctx.stroke();
+    }
+    ctx.font='10px "Share Tech Mono",monospace';ctx.textAlign='center';
+    ctx.fillStyle=lineA(.85);
+    ctx.fillText(`${h.side==='L'?'KIRI':'KANAN'}·${GNAME[h.g]}`,h.wrist.x,h.wrist.y+24);
+    ctx.textAlign='left';
+  }
+}
+function drawTrail(now){
+  ctx.lineCap='round';
+  for(let i=1;i<trail.length;i++){
+    const a=trail[i-1],b=trail[i];
+    if(b.brk)continue;
+    const al=1-(now-b.t)/900; if(al<=0)continue;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+    ctx.strokeStyle=amberA(al*.85);ctx.lineWidth=6*al;ctx.stroke();
+  }
+  if(trail.length){
+    const p=trail[trail.length-1];
+    ctx.beginPath();ctx.arc(p.x,p.y,4,0,7);ctx.fillStyle=amberA(.95);ctx.fill();
+    ctx.beginPath();ctx.arc(p.x,p.y,10,0,7);ctx.strokeStyle=amberA(.4);ctx.stroke();
+  }
+}
+function drawSparks(now,dt){
+  for(let i=sparks.length-1;i>=0;i--){
+    const s=sparks[i];const age=(now-s.t0)/s.life;
+    if(age>=1){sparks.splice(i,1);continue;}
+    s.x+=s.vx*dt/16.7;s.y+=s.vy*dt/16.7;s.vy+=.05*dt/16.7;
+    ctx.fillStyle=amberA((1-age)*.9);
+    ctx.fillRect(s.x-1,s.y-1,2,2);
+  }
+}
+function drawHolo(now){
+  if(holo.t<=.005){
+    if(hands.length===0){
+      const a=(Math.sin(now*.003)*.5+.5)*.3+.1;
+      ctx.font='11px "Share Tech Mono",monospace';ctx.textAlign='center';
+      ctx.fillStyle=lineA(a);
+      ctx.fillText('— ANGKAT TELAPAK TERBUKA KE KAMERA UNTUK MEMANGGIL HOLOGRAM —',CW/2,CH*.8);
+      ctx.textAlign='left';
+    }
+    return;
+  }
+  const t=holo.t, sh=SHAPES[shapeIdx];
+  const c1=1.70158,c3=2.70158;
+  const f=Math.max(0,1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2));   // easeOutBack
+  const cx=CW/2, cy=CH*.44;
+  const size=Math.min(CW,CH)*.21*holo.scale*(.25+.75*f);
+  const hy=holo.yaw+head.yaw*Math.PI/180*.2;
+  const hp=clamp(holo.pitch+head.pitch*Math.PI/180*.12,-1.2,1.2);
+  const cyw=Math.cos(hy),syw=Math.sin(hy),cp=Math.cos(hp),sp=Math.sin(hp);
+  const n=sh.v.length;
+  const sx=new Float32Array(n),sy=new Float32Array(n),dz=new Float32Array(n);
+  for(let i=0;i<n;i++){
+    const[vx,vy,vz]=sh.v[i];
+    const x1=vx*cyw+vz*syw, z1=-vx*syw+vz*cyw;
+    const y2=vy*cp-z1*sp, z2=vy*sp+z1*cp;
+    const pr=3.1/(3.1-z2);
+    sx[i]=cx+x1*pr*size; sy[i]=cy+y2*pr*size; dz[i]=z2;
+  }
+  const acc=overdrive?'255,176,88':'126,231,255';
+  const buckets=[[],[],[]];
+  for(let k=0;k<sh.e.length;k+=2){
+    const nn=((dz[sh.e[k]]+dz[sh.e[k+1]])/2+1.4)/2.8;
+    buckets[nn<.4?0:nn<.72?1:2].push(sh.e[k],sh.e[k+1]);
+  }
+  ctx.lineJoin='round';
+  const bA=[.28,.5,.85],bW=[1,1.3,1.7];
+  for(let b=0;b<3;b++){                              // lapisan glow murah
+    const arr=buckets[b];if(!arr.length)continue;
+    ctx.beginPath();
+    for(let k=0;k<arr.length;k+=2){ctx.moveTo(sx[arr[k]],sy[arr[k]]);ctx.lineTo(sx[arr[k+1]],sy[arr[k+1]]);}
+    ctx.strokeStyle=`rgba(${acc},0.1)`;ctx.lineWidth=4.5;ctx.stroke();
+  }
+  for(let b=0;b<3;b++){                              // garis utama (kedalaman)
+    const arr=buckets[b];if(!arr.length)continue;
+    ctx.beginPath();
+    for(let k=0;k<arr.length;k+=2){ctx.moveTo(sx[arr[k]],sy[arr[k]]);ctx.lineTo(sx[arr[k+1]],sy[arr[k+1]]);}
+    ctx.strokeStyle=`rgba(${acc},${bA[b]*(0.3+0.7*t)})`;ctx.lineWidth=bW[b];ctx.stroke();
+  }
+  if(sh.dots&&n<=140){
+    ctx.fillStyle=`rgba(${acc},0.9)`;
+    for(let i=0;i<n;i++)ctx.fillRect(sx[i]-1,sy[i]-1,2,2);
+  }
+  // cincin proyeksi di "lantai"
+  const gy=cy+size*1.5, rx=size*1.2;
+  ctx.strokeStyle=`rgba(${acc},${.4*t})`;ctx.lineWidth=1;
+  ctx.beginPath();ctx.ellipse(cx,gy,rx,rx*.22,0,0,7);ctx.stroke();
+  ctx.setLineDash([6,10]);ctx.lineDashOffset=-now*.03;
+  ctx.strokeStyle=`rgba(${acc},${.3*t})`;
+  ctx.beginPath();ctx.ellipse(cx,gy,rx*.78,rx*.17,0,0,7);ctx.stroke();
+  ctx.setLineDash([]);
+  for(let k=0;k<24;k++){
+    const th=k/24*2*Math.PI+now*.0006;
+    const px=cx+Math.cos(th)*rx, py=gy+Math.sin(th)*rx*.22;
+    ctx.beginPath();ctx.moveTo(px,py);
+    ctx.lineTo(px+Math.cos(th)*5,py+Math.sin(th)*5*.22);
+    ctx.strokeStyle=`rgba(${acc},${.5*t})`;ctx.stroke();
+  }
+  // readout teknikal
+  ctx.font='10px "Share Tech Mono",monospace';
+  const lx=cx+size*1.45, ly=cy-size*.55;
+  ctx.strokeStyle=`rgba(${acc},${.35*t})`;
+  ctx.beginPath();ctx.moveTo(lx-12,ly-14);ctx.lineTo(lx-12,ly+rowsH(5));ctx.stroke();
+  const rows=[
+    ['YAW',(((holo.yaw*180/Math.PI)%360+360)%360).toFixed(1)+'°'],
+    ['PITCH',(holo.pitch*180/Math.PI).toFixed(1)+'°'],
+    ['SKALA',holo.scale.toFixed(2)+'×'],
+    ['BENTUK',sh.name],
+    ['ENERGI',Math.round(energy*100)+'%']];
+  rows.forEach((r,i)=>{
+    ctx.fillStyle='rgba(140,200,210,.55)';ctx.fillText(r[0],lx,ly+i*16);
+    ctx.fillStyle=`rgba(${acc},.9)`;ctx.textAlign='right';ctx.fillText(r[1],lx+92,ly+i*16);ctx.textAlign='left';
+  });
+}
+function rowsH(k){return (k-1)*16+4;}
+function drawScaleLink(){
+  if(!scaling)return;
+  const L=hands.find(h=>h.side==='L'),R=hands.find(h=>h.side==='R');
+  if(!L||!R)return;
+  ctx.setLineDash([4,7]);
+  ctx.beginPath();ctx.moveTo(L.wrist.x,L.wrist.y);ctx.lineTo(R.wrist.x,R.wrist.y);
+  ctx.strokeStyle=lineA(.6);ctx.lineWidth=1.2;ctx.stroke();
+  ctx.setLineDash([]);
+  for(const w of[L.wrist,R.wrist]){
+    ctx.beginPath();ctx.arc(w.x,w.y,14,0,7);ctx.strokeStyle=lineA(.8);ctx.stroke();
+  }
+  ctx.font='11px "Share Tech Mono",monospace';ctx.textAlign='center';
+  ctx.fillStyle=lineA(.95);
+  ctx.fillText('SKALA '+(holo.scale).toFixed(2)+'×',(L.wrist.x+R.wrist.x)/2,(L.wrist.y+R.wrist.y)/2-14);
+  ctx.textAlign='left';
+}
+function drawFx(now){
+  for(let i=fx.length-1;i>=0;i--){
+    const f=fx[i],p=(now-f.t0)/f.dur;
+    if(p>=1){fx.splice(i,1);continue;}
+    if(f.type==='ring'){
+      const e=1-Math.pow(1-p,3), r=e*f.max;
+      ctx.beginPath();ctx.arc(f.x,f.y,r,0,7);
+      ctx.strokeStyle=lineA((1-p)*.7);ctx.lineWidth=2;ctx.stroke();
+      ctx.beginPath();ctx.arc(f.x,f.y,r*.66,0,7);
+      ctx.strokeStyle=lineA((1-p)*.35);ctx.stroke();
+    }else if(f.type==='flash'){
+      ctx.fillStyle=`rgba(255,255,255,${(1-p)*.5})`;
+      ctx.fillRect(0,0,CW,CH);
+    }
+  }
+}
+
+/* ================= pembaruan panel (throttle) ================= */
+const setC=(el,v)=>{el.style.left=(50+Math.min(0,v)*50)+'%';el.style.width=(Math.abs(v)*50)+'%';};
+const setP=(el,v)=>{el.style.width=(clamp(v,0,1)*100)+'%';};
+let lastPanel=0,gCache='';
+function updatePanels(now){
+  if(now-lastPanel<120)return; lastPanel=now;
+  if(faceLm){
+    $('faceDot').className='dot';
+    setC($('bYaw'),clamp(head.yaw/60,-1,1));   $('yawV').textContent=head.yaw.toFixed(0)+'°';
+    setC($('bPitch'),clamp(head.pitch/60,-1,1));$('pitchV').textContent=head.pitch.toFixed(0)+'°';
+    setC($('bRoll'),clamp(head.roll/60,-1,1)); $('rollV').textContent=head.roll.toFixed(0)+'°';
+    setP($('bBlink'),blinkV); $('blinkV').textContent=Math.round(blinkV*100)+'%';
+    setP($('bSmile'),smileV); $('smileV').textContent=Math.round(smileV*100)+'%';
+  }else{
+    $('faceDot').className='dot off';
+    $('yawV').textContent='—';$('pitchV').textContent='—';$('rollV').textContent='—';
+    setP($('bBlink'),0);setP($('bSmile'),0);
+  }
+  if(posePts){
+    $('poseDot').className='dot'+(armsRaised?' warn':'');
+    const st=$('poseState');
+    st.textContent=armsRaised?'SURGE DAYA — TANGAN TERANGKAT':'TARGET TERKUNCI — POSTUR AKTIF';
+    st.className=armsRaised?'surge':'';
+    $('angL').textContent=angL.toFixed(0)+'°';$('angR').textContent=angR.toFixed(0)+'°';
+    setP($('bAngL'),angL/180);setP($('bAngR'),angR/180);
+  }else{
+    $('poseDot').className='dot off';
+    $('poseState').textContent='MENCARI TARGET…';$('poseState').className='';
+    $('angL').textContent='—';$('angR').textContent='—';
+    setP($('bAngL'),0);setP($('bAngR'),0);
+  }
+  const L=hands.find(h=>h.side==='L'),R=hands.find(h=>h.side==='R');
+  const g=`${GNAME[L?L.g:'NONE']}|${GNAME[R?R.g:'NONE']}|${SHAPES[shapeIdx].name}|${holo.state==='active'?'AKTIF':'DORMAN'}`;
+  if(g!==gCache){gCache=g;
+    $('gL').textContent=GNAME[L?L.g:'NONE']; $('gR').textContent=GNAME[R?R.g:'NONE'];
+    $('gShape').textContent=SHAPES[shapeIdx].name;
+    $('gState').textContent=holo.state==='active'?'AKTIF':'DORMAN';
+  }
+  $('eWrap').classList.toggle('od',overdrive);
+  $('eVal').textContent=Math.round(energy*100)+'%';
+  $('fps').textContent=Math.round(fpsE);
+}
+
+/* ================= loop utama ================= */
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt=Math.min(50,now-lastT);lastT=now;
+  fpsE+=(1000/Math.max(1,dt)-fpsE)*.06;
+  computeMap();
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,CW,CH);
+  detectAll(now);
+  updateHolo(dt,now);
+  drawPose();
+  drawFace();
+  drawHands();
+  drawTrail(now);
+  drawSparks(now,dt);
+  drawHolo(now);
+  drawScaleLink();
+  drawFx(now);
+  updateHum();
+  $('eFill').style.width=(energy*100)+'%';
+  updatePanels(now);
+}
+</script>
+</body>
+</html>
